@@ -17,9 +17,8 @@ Why FlatParameter?
 
 import torch
 import torch.nn as nn
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Optional
 from fsdp.utils import (
-    compute_shard_range,
     get_rank,
     get_world_size,
     flatten_params,

@@ -178,3 +178,4 @@ def flatten_module_params(
     """
     raise NotImplementedError("Students need to implement flatten_module_params")
 
+

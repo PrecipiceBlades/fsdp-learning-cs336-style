@@ -8,9 +8,18 @@ Key differences from our previous implementation:
 1. fully_shard(module) - modifies module in-place
 2. Automatic hook registration
 3. More Pythonic API
+4. Support for meta device initialization
 
 Example usage:
-    model = Transformer()
+    # Standard usage (model on device)
+    model = Transformer().cuda()
+    for layer in model.layers:
+        fully_shard(layer)
+    fully_shard(model)
+    
+    # Meta device usage (memory efficient for large models)
+    with torch.device("meta"):
+        model = Transformer()
     for layer in model.layers:
         fully_shard(layer)
     fully_shard(model)
@@ -18,10 +27,11 @@ Example usage:
 
 import torch
 import torch.nn as nn
-from typing import Optional, List
+from typing import Optional, List, Callable
 from fsdp.flat_param import flatten_module_params, FlatParameter
 from fsdp.forward_pass import register_forward_hooks
 from fsdp.backward_pass import register_backward_hooks
+from fsdp.meta_init import materialize_meta_module
 
 
 # Global registry to track FSDP-wrapped modules and their FlatParameters
@@ -34,31 +44,44 @@ def fully_shard(
     reshard_after_forward: bool = True,
     rank: Optional[int] = None,
     world_size: Optional[int] = None,
+    param_init_fn: Optional[Callable[[nn.Module], None]] = None,
 ) -> nn.Module:
     """Apply FSDP to a module (FSDP2-style API).
     
     This function modifies the module in-place by:
-    1. Flattening and sharding its parameters into a FlatParameter
-    2. Registering forward/backward hooks for all-gather and reduce-scatter
-    3. Storing the FlatParameter in a global registry
+    1. Materializing meta tensors if module is on meta device
+    2. Flattening and sharding its parameters into a FlatParameter
+    3. Registering forward/backward hooks for all-gather and reduce-scatter
+    4. Storing the FlatParameter in a global registry
     
     Args:
-        module: Module to apply FSDP to
+        module: Module to apply FSDP to (can be on meta device)
         reshard_after_forward: Whether to reshard parameters after forward pass.
             True: saves memory but requires re-gather in backward
             False: keeps parameters for backward, saves communication
         rank: Current rank (default: 0 for single-GPU)
         world_size: World size (default: 1 for single-GPU)
+        param_init_fn: Optional function to initialize parameters after materialization.
+            If module is on meta device and this is None, uses default initialization.
+            Signature: (module: nn.Module) -> None
     
     Returns:
         The same module (modified in-place)
     
     Example:
+        Standard usage:
         >>> from fsdp import fully_shard
-        >>> model = Transformer()
+        >>> model = Transformer().cuda()
         >>> for layer in model.layers:
         ...     fully_shard(layer)
         >>> fully_shard(model)
+        
+        Meta device usage (memory efficient):
+        >>> with torch.device("meta"):
+        ...     model = Transformer()
+        >>> for layer in model.layers:
+        ...     fully_shard(layer)  # Materializes only this layer's shard
+        >>> fully_shard(model)  # Materializes only root module's shard
     
     Comparison with FSDP1:
         FSDP1: model = FSDP(model, auto_wrap_policy=...)
@@ -82,6 +105,14 @@ def fully_shard(
         # No parameters to shard, but still register as FSDP-wrapped
         _FSDP_MODULE_REGISTRY[id(module)] = None
         return module
+    
+    # Check if module is on meta device
+    has_meta = any(p.is_meta for p in params)
+    
+    if has_meta:
+        # Materialize meta tensors to CPU first (will be sharded immediately)
+        # This is memory efficient because we only materialize temporarily
+        materialize_meta_module(module, torch.device("cpu"), param_init_fn)
     
     # Flatten and shard parameters
     flat_param = flatten_module_params(

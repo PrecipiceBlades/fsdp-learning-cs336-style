@@ -90,8 +90,16 @@ def materialize_meta_tensor(
     if init_fn is not None:
         init_fn(materialized)
     else:
-        # Default: zero initialization
-        torch.nn.init.zeros_(materialized)
+        # Default initialization mimics PyTorch's default for Linear layers
+        if materialized.ndim >= 2:
+            # Weight matrix - use xavier uniform (kaiming uniform)
+            torch.nn.init.kaiming_uniform_(materialized, a=(5 ** 0.5))
+        else:
+            # Bias or 1D tensor - use uniform based on fan-in
+            # This matches PyTorch's default for Linear bias
+            fan_in = meta_tensor.numel()
+            bound = 1 / (fan_in ** 0.5) if fan_in > 0 else 0
+            torch.nn.init.uniform_(materialized, -bound, bound)
     
     return materialized
 
@@ -105,6 +113,10 @@ def materialize_meta_module(
     
     This modifies the module in-place.
     
+    IMPORTANT: This function traverses modules in the order they were defined in __init__,
+    ensuring that parameters are initialized in the same order as standard PyTorch initialization.
+    This is critical for deterministic initialization with RNG.
+    
     Args:
         module: Module with parameters on meta device
         device: Real device to materialize on
@@ -116,27 +128,32 @@ def materialize_meta_module(
         >>> materialize_meta_module(model, torch.device("cpu"))
         >>> assert all(p.device.type == "cpu" for p in model.parameters())
     """
-    # Materialize parameters
-    for name, param in module.named_parameters(recurse=True):
-        if is_meta_device(param):
-            materialized = materialize_meta_tensor(param, device, init_fn)
-            # Navigate to parent module and replace parameter
-            *path, param_name = name.split('.')
-            parent = module
-            for attr in path:
-                parent = getattr(parent, attr)
-            setattr(parent, param_name, nn.Parameter(materialized, requires_grad=param.requires_grad))
-    
-    # Materialize buffers
-    for name, buffer in module.named_buffers(recurse=True):
-        if is_meta_device(buffer):
-            materialized = materialize_meta_tensor(buffer, device, None)  # No init for buffers
-            # Navigate to parent module and replace buffer
-            *path, buffer_name = name.split('.')
-            parent = module
-            for attr in path:
-                parent = getattr(parent, attr)
-            parent.register_buffer(buffer_name, materialized)
+    # Materialize parameters in module definition order (not named_parameters order)
+    # Use modules() which returns modules in the order they were added
+    for submodule in module.modules():
+        # Check if this module has meta parameters
+        has_meta_params = any(p.is_meta for p in submodule.parameters(recurse=False))
+        
+        if has_meta_params:
+            # Materialize all parameters to empty tensors first
+            for param_name, param in submodule.named_parameters(recurse=False):
+                if is_meta_device(param):
+                    empty_param = torch.empty_like(param, device=device)
+                    setattr(submodule, param_name, nn.Parameter(empty_param, requires_grad=param.requires_grad))
+            
+            # Call the module's reset_parameters() to initialize properly
+            if hasattr(submodule, 'reset_parameters'):
+                submodule.reset_parameters()
+            elif init_fn is not None:
+                # Fallback to custom init_fn if no reset_parameters
+                for param in submodule.parameters(recurse=False):
+                    init_fn(param)
+        
+        # Process direct buffers of this module (not recursive)
+        for buffer_name, buffer in submodule.named_buffers(recurse=False):
+            if is_meta_device(buffer):
+                materialized = materialize_meta_tensor(buffer, device, None)  # No init for buffers
+                submodule.register_buffer(buffer_name, materialized)
 
 
 def materialize_shard_only(
