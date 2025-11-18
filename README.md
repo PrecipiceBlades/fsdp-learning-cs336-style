@@ -21,10 +21,10 @@ A complete Fully Sharded Data Parallel (FSDP) implementation with Meta Device in
 **If this helps you**: Please consider starring ⭐ this repo and citing it in your work!
 
 ```bibtex
-@misc{yi2024fsdp,
+@misc{yi2025fsdp,
   author = {Ruitao Yi},
   title = {FSDP Learning Implementation (CS336-Style)},
-  year = {2024},
+  year = {2025},
   publisher = {GitHub},
   url = {https://github.com/PrecipiceBlades/fsdp-learning-cs336-style}
 }
@@ -553,10 +553,10 @@ This project is open source under the MIT License.
 If you use this implementation or find it helpful for your learning/research, please cite:
 
 ```bibtex
-@misc{yi2024fsdp,
+@misc{yi2025fsdp,
   author = {Ruitao Yi},
   title = {FSDP Learning Implementation (CS336-Style)},
-  year = {2024},
+  year = {2025},
   publisher = {GitHub},
   howpublished = {\url{https://github.com/PrecipiceBlades/fsdp-learning-cs336-style}},
   note = {Inspired by Stanford CS336: Language Modeling from Scratch}
@@ -565,4 +565,4 @@ If you use this implementation or find it helpful for your learning/research, pl
 
 ---
 
-**Status**: ✅ Production Ready | **Author**: Ruitao Yi | **Last Updated**: November 2024
+**Status**: ✅ Production Ready | **Author**: Ruitao Yi | **Last Updated**: November 2025
