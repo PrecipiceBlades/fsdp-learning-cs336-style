@@ -217,6 +217,43 @@ for layer in model.layers:
 fully_shard(model)
 ```
 
+### 7. Prefetching (`fsdp/prefetch.py`) - ⚠️ Not Yet Implemented
+
+**Status**: Placeholder implementation only
+
+**What it would do**:
+- **Communication-Computation Overlap**: Start all-gathering parameters for next layer while computing current layer
+- **Async All-Gather**: Use `async_op=True` to return immediately and wait later
+- **Performance Impact**: Can achieve 2-3× speedup for communication-bound workloads
+
+**Why not implemented yet**:
+- Core FSDP functionality works correctly without it (numerical equivalence achieved)
+- Prefetching adds significant complexity (module execution order tracking, async handle management)
+- Requires careful handling of edge cases (first/last layer, dynamic control flow)
+
+**What would be needed**:
+```python
+# Pseudocode for prefetching logic
+def forward_pre_hook(module, inputs):
+    # Wait for this layer's all-gather (if started by previous layer)
+    if flat_param._async_handle:
+        flat_param._async_handle.wait()
+    
+    flat_param.use_full_param()
+    
+    # Start all-gather for NEXT layer (overlap with computation)
+    next_flat_param = get_next_module_flat_param(module)
+    if next_flat_param:
+        next_flat_param.all_gather(async_op=True)  # Non-blocking!
+```
+
+**Expected Benefits**:
+- **Latency Hiding**: Overlap GPU compute with network communication
+- **Higher Throughput**: ~20-30% faster training for large models on fast interconnects
+- **Critical for Production**: PyTorch FSDP2 has sophisticated prefetching (bucketing, pipelining)
+
+For production use cases requiring maximum performance, use [PyTorch FSDP2](https://pytorch.org/docs/stable/fsdp.html) which has optimized async communication and prefetching built-in.
+
 ---
 
 ## 🔑 Key Technical Details
@@ -428,6 +465,12 @@ Students will master:
 7. ✅ Meta device initialization for large models
 8. ✅ Nested FSDP and parameter duplication prevention
 9. ✅ RNG determinism in distributed training
+10. 📚 Advanced Topics (not implemented, but documented):
+    - ⚠️ Communication-computation overlap (prefetching)
+    - ⚠️ Async all-gather and reduce-scatter
+    - ⚠️ Module execution order tracking
+
+**Note**: Prefetching/async operations are NOT implemented in this educational repo. For production use with these optimizations, use [PyTorch FSDP2](https://pytorch.org/docs/stable/fsdp.html).
 
 ---
 

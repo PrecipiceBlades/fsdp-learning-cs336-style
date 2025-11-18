@@ -43,6 +43,11 @@ from fsdp.meta_init import (
     materialize_meta_tensor,
     materialize_meta_module,
 )
+from fsdp.checkpoint import (
+    checkpoint_wrapper,
+    apply_activation_checkpointing,
+    is_checkpointed,
+)
 
 __all__ = [
     # FSDP2-style API
@@ -59,6 +64,10 @@ __all__ = [
     'init_model_on_meta',
     'materialize_meta_tensor',
     'materialize_meta_module',
+    # Activation checkpointing
+    'checkpoint_wrapper',
+    'apply_activation_checkpointing',
+    'is_checkpointed',
 ]
 
 __version__ = '0.1.0'

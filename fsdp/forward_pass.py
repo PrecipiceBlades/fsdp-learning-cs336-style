@@ -16,8 +16,6 @@ import torch
 import torch.nn as nn
 from typing import Optional, Tuple, Any
 from fsdp.flat_param import FlatParameter
-from fsdp.utils import all_gather_tensor
-
 
 def all_gather_params(
     flat_param: FlatParameter,
@@ -63,15 +61,11 @@ def reshard_params(flat_param: FlatParameter) -> None:
     flat_param.reshard()
 
 
-def create_forward_pre_hook(
-    flat_param: FlatParameter,
-    reshard_after_forward: bool = True
-):
+def create_forward_pre_hook(flat_param: FlatParameter):
     """Create a forward pre-hook that all-gathers parameters before forward.
     
     Args:
         flat_param: FlatParameter to manage
-        reshard_after_forward: Whether to reshard after forward pass
     
     Returns:
         Hook function to be registered with module.register_forward_pre_hook()
@@ -79,7 +73,7 @@ def create_forward_pre_hook(
     Example:
         >>> module = nn.Linear(10, 10)
         >>> flat_param = flatten_module_params(module)
-        >>> hook = create_forward_pre_hook(flat_param, reshard_after_forward=True)
+        >>> hook = create_forward_pre_hook(flat_param)
         >>> handle = module.register_forward_pre_hook(hook)
     """
     def forward_pre_hook(module: nn.Module, inputs: Tuple[Any, ...]) -> None:
@@ -158,7 +152,7 @@ def register_forward_hooks(
         >>> output = module(input)
     """
     # Create hooks
-    pre_hook = create_forward_pre_hook(flat_param, reshard_after_forward)
+    pre_hook = create_forward_pre_hook(flat_param)
     post_hook = create_forward_post_hook(flat_param, reshard_after_forward)
     
     # Register hooks
